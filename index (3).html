@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<title>Maki's Life Quest</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+/* Layout: 16-bit JRPG screen — battle scene (princess vs dragon) on top, command windows below: quest log, attack panel, world map. Single night theme by design. */
+:root{
+  --night:#0d0b24; --win-top:#2f3fb8; --win-bot:#151b62; --win-edge:#f4f1ff; --win-ink:#06051a;
+  --text:#f4f1ff; --dim:#a9b0ea; --gold:#ffd447; --hp:#ff4d6d; --exp:#5cf0a0; --sky:#1b1650;
+  --f-pixel:"Press Start 2P", ui-monospace, "Courier New", monospace;
+  --f-text:"VT323", ui-monospace, "Courier New", monospace;
+  --px:5px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--night)}
+body{margin:0;background:var(--night);color:var(--text);font-family:var(--f-text);font-size:21px;line-height:1.15;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 56px;
+  background-image:radial-gradient(var(--sky) 1px,transparent 1px);background-size:6px 6px}
+.wrap{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+canvas.sprite{image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+.pix{font-family:var(--f-pixel);letter-spacing:0;line-height:1.5}
+
+/* the classic menu window */
+.win{background:linear-gradient(180deg,var(--win-top),var(--win-bot));border:3px solid var(--win-edge);border-radius:7px;
+  box-shadow:0 0 0 3px var(--win-ink),inset 0 0 0 2px var(--win-ink),6px 6px 0 3px rgba(0,0,0,.45);padding:14px 16px}
+.win h2{font-family:var(--f-pixel);font-size:12px;margin:0 0 12px;color:var(--gold);text-transform:uppercase}
+
+/* ===== battle scene ===== */
+.scene{position:relative;height:300px;border:3px solid var(--win-edge);border-radius:7px;overflow:hidden;
+  box-shadow:0 0 0 3px var(--win-ink),6px 6px 0 3px rgba(0,0,0,.45);
+  background:linear-gradient(180deg,#0b0930 0%,#251a6b 55%,#4a2a7a 78%,#6b3b74 100%)}
+.stars i{position:absolute;width:3px;height:3px;background:#fff;opacity:.8}
+.stars i.t{animation:tw 1.6s steps(2) infinite}
+@keyframes tw{50%{opacity:.15}}
+.moon{position:absolute;top:22px;right:16%;width:34px;height:34px;background:#fff4c2;box-shadow:inset -9px -3px 0 #e8d27d;border-radius:50%}
+.hills{position:absolute;left:0;right:0;bottom:46px;height:60px;
+  background:
+   radial-gradient(60px 40px at 15% 100%,#2a1d5c 98%,transparent 100%),
+   radial-gradient(90px 55px at 45% 100%,#24184f 98%,transparent 100%),
+   radial-gradient(70px 45px at 80% 100%,#2a1d5c 98%,transparent 100%)}
+.castle{position:absolute;left:52%;bottom:46px;width:54px;height:58px;background:#1a1240;
+  clip-path:polygon(0 100%,0 30%,10% 30%,10% 20%,20% 20%,20% 30%,40% 30%,40% 0,60% 0,60% 30%,80% 30%,80% 20%,90% 20%,90% 30%,100% 30%,100% 100%)}
+.castle::after{content:"";position:absolute;left:44%;top:12%;width:12%;height:12%;background:var(--gold)}
+.ground{position:absolute;left:0;right:0;bottom:0;height:46px;background:
+  repeating-linear-gradient(90deg,#3d8c3a 0 16px,#357d33 16px 32px);border-top:4px solid #7fd35a}
+.ground::after{content:"";position:absolute;inset:14px 0 0;background:repeating-linear-gradient(90deg,#6b4423 0 12px,#5a381c 12px 24px)}
+.hero,.foe{position:absolute;bottom:40px;display:flex;align-items:flex-end;z-index:2}
+.hero{left:9%}
+.foe{right:7%}
+.bob{animation:bob 1s steps(2) infinite}
+.foe .bob{animation-duration:1.3s}
+@keyframes bob{50%{transform:translateY(-4px)}}
+.hero .sword{margin-left:calc(-3 * var(--px));margin-bottom:calc(5 * var(--px));transform:rotate(18deg);transform-origin:bottom center}
+.hero .dog{margin-left:calc(3 * var(--px));margin-bottom:-2px}
+.foe.hit{animation:hit .5s steps(2) 1}
+@keyframes hit{0%,100%{transform:translateX(0);filter:none}25%{transform:translateX(8px);filter:brightness(3)}75%{transform:translateX(-6px);filter:brightness(3)}}
+.foe.dead canvas{opacity:.25;filter:grayscale(1)}
+.dmg{position:absolute;right:16%;bottom:170px;font-family:var(--f-pixel);font-size:18px;color:var(--gold);
+  text-shadow:2px 2px 0 var(--win-ink);opacity:0;pointer-events:none;z-index:4}
+.dmg.go{animation:dmg 1.2s ease-out 1}
+@keyframes dmg{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-50px)}}
+.plate{position:absolute;top:10px;z-index:3;background:rgba(6,5,26,.72);border:2px solid var(--win-edge);border-radius:5px;padding:8px 10px;min-width:210px}
+.plate.l{left:10px}.plate.r{right:10px}
+.plate .nm{font-family:var(--f-pixel);font-size:10px;display:flex;justify-content:space-between;gap:10px}
+.bar{height:10px;margin-top:6px;border:2px solid var(--win-edge);background:var(--win-ink);position:relative}
+.bar i{position:absolute;inset:0 auto 0 0;transition:width .6s steps(12)}
+.bar.exp i{background:var(--exp)}
+.bar.hp i{background:var(--hp)}
+.plate small{display:block;font-size:17px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums}
+
+/* dialog box */
+.dialog{display:flex;gap:14px;align-items:flex-start;min-height:84px}
+.dialog p{margin:0;font-size:23px;flex:1;min-width:0}
+.dialog .cursor{animation:blink .8s steps(2) infinite;color:var(--gold)}
+@keyframes blink{50%{opacity:0}}
+.mute{font-family:var(--f-pixel);font-size:9px;color:var(--dim);border:2px solid var(--dim);border-radius:4px;padding:6px 8px;white-space:nowrap}
+
+/* stat strip */
+.statrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.stat{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.stat b{font-family:var(--f-pixel);font-size:16px;display:block;font-variant-numeric:tabular-nums}
+.stat span{font-size:17px;color:var(--dim)}
+
+/* day nav */
+.daynav{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.daynav .arrows{display:flex;align-items:center;gap:10px}
+.arrow{font-family:var(--f-pixel);font-size:14px;width:40px;height:40px;border:3px solid var(--win-edge);border-radius:6px;background:var(--win-bot);box-shadow:0 0 0 2px var(--win-ink)}
+.arrow:disabled{opacity:.3;cursor:default}
+.dayname{font-family:var(--f-pixel);font-size:13px;min-width:200px;text-align:center}
+.qcount{font-size:21px;color:var(--dim)}
+.qcount b{color:var(--gold);font-weight:normal}
+
+/* quest log */
+.quests{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.q{display:flex;flex-direction:column;gap:10px;min-width:0;position:relative}
+.q.done{background:linear-gradient(180deg,#22795a,#0e3d33)}
+.qhead{display:flex;gap:12px;align-items:center}
+.qhead .ico{flex:none;width:52px;height:52px;display:grid;place-items:center;background:rgba(6,5,26,.45);border:2px solid rgba(244,241,255,.35);border-radius:4px}
+.qhead h3{margin:0;font-family:var(--f-pixel);font-size:10px;line-height:1.6}
+.qhead p{margin:2px 0 0;font-size:18px;color:var(--dim)}
+.q.done .qhead p{color:#c8f5dc}
+.reward{position:absolute;top:10px;right:12px;font-family:var(--f-pixel);font-size:9px;color:var(--gold)}
+.ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto}
+.cmd{font-family:var(--f-pixel);font-size:10px;padding:10px 12px;border:2px solid var(--win-edge);border-radius:5px;background:rgba(6,5,26,.5);text-transform:uppercase}
+.cmd:hover{background:rgba(255,212,71,.15)}
+.cmd.on{background:var(--gold);color:var(--win-ink);border-color:var(--gold)}
+.cmd.wide{flex:1}
+.cmd.wide::before{content:"▶ ";visibility:hidden}
+.cmd.wide:hover::before,.cmd.wide:focus-visible::before{visibility:visible}
+.step{width:40px;height:40px;font-family:var(--f-pixel);font-size:14px;border:2px solid var(--win-edge);border-radius:5px;background:rgba(6,5,26,.5)}
+.count{font-family:var(--f-pixel);font-size:16px;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+.sub{font-size:18px;color:var(--dim);font-variant-numeric:tabular-nums}
+.q.done .sub{color:#c8f5dc}
+.potions{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;width:100%}
+.potion{display:grid;place-items:center;height:44px;border:2px solid rgba(244,241,255,.25);border-radius:4px;background:rgba(6,5,26,.35)}
+.potion canvas{opacity:.28;filter:grayscale(1)}
+.potion.on canvas{opacity:1;filter:none}
+.timein{display:flex;gap:8px;width:100%}
+.timein label{flex:1;display:flex;flex-direction:column;gap:3px;font-size:17px;color:var(--dim)}
+.timein input,.field input{font-family:var(--f-pixel);font-size:11px;padding:9px 8px;border:2px solid var(--win-edge);border-radius:5px;background:var(--win-ink);color:var(--text);width:100%;min-width:0}
+
+/* lower */
+.lower{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+.attack{display:flex;flex-direction:column;gap:12px}
+.bnums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.bnums div{font-size:17px;color:var(--dim)}
+.bnums b{display:block;font-family:var(--f-pixel);font-size:12px;color:var(--text);margin-top:4px;font-variant-numeric:tabular-nums}
+.chart{width:100%;height:auto;display:block;background:rgba(6,5,26,.45);border:2px solid rgba(244,241,255,.3);border-radius:4px}
+.chart text{fill:var(--dim);font-family:var(--f-text);font-size:14px}
+.field{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.field label{display:flex;flex-direction:column;gap:3px;font-size:17px;color:var(--dim)}
+.field input{width:120px}
+.cmd.atk{background:var(--hp);border-color:var(--win-edge);color:#fff;padding:12px 14px}
+details summary{cursor:pointer;font-size:18px;color:var(--dim)}
+.map .grid28{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cell{aspect-ratio:1;max-width:100%;border:2px solid rgba(244,241,255,.3);border-radius:3px;background:rgba(6,5,26,.5);font-family:var(--f-pixel);font-size:8px;color:var(--dim);display:grid;place-items:center}
+.cell.l1{background:#3a3a8a}
+.cell.l2{background:#2f9a6a;color:#fff}
+.cell.l3{background:var(--gold);color:var(--win-ink)}
+.cell.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+.legend{display:flex;gap:6px;align-items:center;font-size:17px;color:var(--dim);margin-top:10px}
+.legend .cell{width:16px;height:16px;aspect-ratio:auto}
+.rules{margin:10px 0 0;padding:0;list-style:none;font-size:18px;color:var(--dim);display:flex;flex-direction:column;gap:4px}
+.rules li::before{content:"♦ ";color:var(--gold)}
+.sync{font-size:17px;color:var(--dim);text-align:center}
+
+.flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:30}
+.flash.go{animation:fl .6s steps(3) 1}
+@keyframes fl{0%,66%{opacity:.7}100%{opacity:0}}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:20;
+  font-family:var(--f-pixel);font-size:12px;color:var(--gold);background:var(--win-bot);border:3px solid var(--win-edge);box-shadow:0 0 0 3px var(--win-ink);
+  border-radius:6px;padding:12px 16px;opacity:0;transition:opacity .15s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+
+@media (max-width:860px){ .quests{grid-template-columns:repeat(2,minmax(0,1fr))} .lower{grid-template-columns:1fr} .statrow{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:600px){
+  :root{--px:3px}
+  .scene{height:280px}
+  .plate{min-width:0;width:calc(50% - 15px);padding:6px 8px}
+  .plate .nm{font-size:8px;flex-direction:column;gap:2px}
+  .hero{left:4%} .foe{right:3%}
+  .castle{display:none}
+  .quests{grid-template-columns:1fr}
+  .bnums{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dayname{min-width:0;font-size:11px}
+  .dialog p{font-size:20px}
+}
+@media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+</style>
+
+<div class="wrap">
+  <!-- battle scene -->
+  <section class="scene" aria-label="Battle scene: Princess Maki versus the dragon">
+    <div class="stars" id="stars"></div>
+    <div class="moon"></div>
+    <div class="hills"></div>
+    <div class="castle"></div>
+    <div class="ground"></div>
+    <div class="plate l">
+      <div class="nm"><span>MAKI</span><span id="lvl">LV 1</span></div>
+      <div class="bar exp"><i id="expFill" style="width:0"></i></div>
+      <small id="expTxt">EXP 0/500 · Novice</small>
+    </div>
+    <div class="plate r">
+      <div class="nm"><span>DRAGON</span><span id="hpKg">?? KG</span></div>
+      <div class="bar hp"><i id="hpFill" style="width:100%"></i></div>
+      <small id="hpTxt">HP ??? · set start weight</small>
+    </div>
+    <div class="hero"><div class="bob" style="display:flex;align-items:flex-end"><canvas class="sprite" id="spPrincess"></canvas><canvas class="sprite sword" id="spSword"></canvas></div><canvas class="sprite dog" id="spDog"></canvas></div>
+    <div class="foe" id="foe"><div class="bob"><canvas class="sprite" id="spDragon"></canvas></div></div>
+    <div class="dmg" id="dmg"></div>
+  </section>
+
+  <section class="win dialog">
+    <p id="say">Princess Maki sets out. A dragon guards the road to January!<span class="cursor">▼</span></p>
+    <button class="mute" id="mute">SOUND: ON</button>
+  </section>
+
+  <section class="statrow">
+    <div class="win stat"><canvas class="sprite" id="icCoin"></canvas><div><b id="sGold">0</b><span>Total EXP</span></div></div>
+    <div class="win stat"><canvas class="sprite" id="icStar"></canvas><div><b id="sToday">0</b><span>EXP today</span></div></div>
+    <div class="win stat"><canvas class="sprite" id="icFlame"></canvas><div><b id="sStreak">0</b><span>Day streak</span></div></div>
+    <div class="win stat"><canvas class="sprite" id="icCrown"></canvas><div><b id="sBest">0</b><span>Best streak</span></div></div>
+  </section>
+
+  <div class="daynav">
+    <div class="arrows">
+      <button class="arrow" id="prev" aria-label="Previous day">◀</button>
+      <span class="dayname" id="dayLabel">TODAY</span>
+      <button class="arrow" id="next" aria-label="Next day">▶</button>
+    </div>
+    <div class="qcount" id="doneTxt">QUESTS 0/9</div>
+  </div>
+
+  <section class="quests" id="quests"></section>
+
+  <section class="lower">
+    <div class="win attack">
+      <h2>⚔ Attack the dragon</h2>
+      <div class="bnums">
+        <div>Start<b id="bStart">–</b></div>
+        <div>Now<b id="bNow">–</b></div>
+        <div>Damage<b id="bLost">–</b></div>
+        <div>Pace needed<b id="bPace">–</b></div>
+      </div>
+      <svg class="chart" id="chart" viewBox="0 0 520 170" role="img" aria-label="Weight over time against the goal"></svg>
+      <div class="field">
+        <label for="wIn">Weigh-in (kg)<input id="wIn" type="number" step="0.1" min="30" max="250" inputmode="decimal" placeholder="72.4"></label>
+        <button class="cmd atk" id="wLog">Strike! +10 EXP</button>
+      </div>
+      <span class="sub" id="bossDeadline"></span>
+      <details>
+        <summary>Dragon settings</summary>
+        <div class="field" style="margin-top:10px">
+          <label for="sStart">Start kg<input id="sStart" type="number" step="0.1" inputmode="decimal"></label>
+          <label for="sGoal">Lose kg<input id="sGoal" type="number" step="0.5" value="10"></label>
+          <label for="sDead">Deadline<input id="sDead" type="date" style="width:170px"></label>
+          <button class="cmd" id="sSave">Save</button>
+        </div>
+      </details>
+    </div>
+    <div class="win map">
+      <h2>World map · 28 days</h2>
+      <div class="grid28" id="grid28"></div>
+      <div class="legend">Few <span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span> All 9</div>
+      <ul class="rules">
+        <li>Tap a day to edit it.</li>
+        <li>7+ quests keeps the streak alive.</li>
+        <li>All 9 = +50 EXP perfect-day bonus.</li>
+        <li>500 EXP per level.</li>
+      </ul>
+    </div>
+  </section>
+  <div class="sync" id="sync">Saved on this device</div>
+</div>
+<div class="flash" id="flash"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+// ================= PIXEL SPRITES =================
+const PAL={k:"#1a1028",c:"#ffd447",r:"#e8364f",Y:"#d99a1e",y:"#ffd16b",s:"#ffd3b0",p:"#ff7ab8",P:"#c9408a",
+  w:"#ffffff",W:"#cfd8f0",g:"#a0773a",G:"#3fae4a",H:"#2a7a35",V:"#7a4fd0",v:"#b48cff",t:"#f2d48a",
+  b:"#4aa8ff",B:"#9fd8ff",D:"#a8673a",d:"#7a4826",n:"#8b5a2b",S:"#8d93b5",R:"#d6404e",o:"#ff9a2e",x:"#ff5a2e"};
+const SPR={
+princess:[
+"......c.c.c.....",
+"......crcrc.....",
+".....kYYYYYk....",
+"....kYyyyyyYk...",
+"....kYsssssYk...",
+"....kYsksksYk...",
+"....kYsssssYk...",
+"....kYssrssYk...",
+"...kYYkssskYYk..",
+"...kYkpppppkYk..",
+"...kYkpPPPpkYk..",
+"...kkpppppppkk..",
+"...ksk.ppp.ksk..",
+"....kpPpppPpk...",
+"...kpppppppppk..",
+"...kpPpppppPpk..",
+"..kpppppppppppk.",
+"..kpPpppppppPpk.",
+".kpppppppppppppk",
+".kPPPPPPPPPPPPPk",
+"..kkkkkkkkkkkkk."],
+sword:[
+"...k...",
+"..kwk..",
+"..kWk..",
+"..kWk..",
+"..kWk..",
+"..kWk..",
+"..kWk..",
+"..kWk..",
+"..kWk..",
+"kcccccc",
+".kkgkk.",
+"...g...",
+"...g...",
+"..kck.."],
+dragon:[
+"................kk....kk",
+"...............kVVk..kVVk",
+"..............kVVVVkkVVVk",
+"...kkk.......kVVvVVVVvVVk",
+"..kGGGk......kVvVVVVVVvk",
+".kGGGGGk......kvVVVVVvk",
+"kGGrGGGGk....kGGGGGGGGk",
+"kGGGGGGGGkkkkGGGGGGGGGGk",
+"kkGGGGGGGGGGGGGGGGGGGGGGk",
+".kwkwkGGGGGGGtttttGGGGGGGk",
+"..kkkkGGGGGGttttttGGGGGGGGk",
+"......kGGGGGtttttttGGGGGGGGkk",
+"......kGGGGGttttttGGGGGGGGGGGk",
+".......kGGGkttttttkGGGkkHGGGGGk",
+"........kGGk.kkkk.kGGk..kkHGGGk",
+".......kGGGk......kGGGk...kHGGk",
+".......kkkkk......kkkkk....kGGk",
+"............................kGk",
+".............................k."],
+dog:[
+"..........kk....",
+".........kDDk...",
+".k.......kDkDkk.",
+"kDk......kDDDDDk",
+".kDkkkkkkDDDDkk.",
+"..kDDDDDDDDDk...",
+"..kDdDDDDDdDk...",
+"..kDkDk..kDkDk..",
+"..kDkDk..kDkDk..",
+"..kkkkk..kkkkk.."],
+potion:[
+"....kkkk....",
+"....knnk....",
+"....kkkk....",
+".....kk.....",
+"....kWWk....",
+"...kWwwWk...",
+"..kbbbbbbk..",
+".kbBbbbbbbk.",
+".kbBbbbbbbk.",
+".kbbbbbbbbk.",
+"..kbbbbbbk..",
+"...kkkkkk..."],
+brush:[
+".w.w.w.w....",
+".wwwwwww....",
+".WWWWWWW....",
+"kkkkkkkkkkkk",
+"kppppppppppk",
+"kpPPPPPPPPpk",
+"kkkkkkkkkkkk"],
+dumbbell:[
+"kk........kk",
+"kSk......kSk",
+"kSkkkkkkkkSk",
+"kSWWWWWWWWSk",
+"kSkkkkkkkkSk",
+"kSk......kSk",
+"kk........kk"],
+book:[
+".kkkkkkkkkk.",
+".kRRRRRRRRk.",
+".kRRccccRRk.",
+".kRRRRRRRRk.",
+".kRRRRRRRRk.",
+".kRRRRRRRRk.",
+".kRRRRRRRRk.",
+".kWWWWWWWWk.",
+".kkkkkkkkkk."],
+case:[
+"....kkkk....",
+"....k..k....",
+".kkkkkkkkkk.",
+".knnnnnnnnk.",
+".knnnnnnnnk.",
+".kkkkcckkkk.",
+".knnnnnnnnk.",
+".knnnnnnnnk.",
+".kkkkkkkkkk."],
+scroll:[
+".kkkkkkkkk.",
+"kWWWWWWWWWk",
+".kwwwwwwwk.",
+".kwkkkkkwk.",
+".kwwwwwwwk.",
+".kwkkkkwwk.",
+".kwwwwwwwk.",
+".kwkkkkkwk.",
+"kWWWWWWWWWk",
+".kkkkkkkkk."],
+palette:[
+"..kkkkkkk...",
+".kttttttttk.",
+"kttRtttBtttk",
+"ktttttttttk.",
+"kttckt..kk..",
+"ktttttGtttk.",
+"ktttttttttk.",
+".kttttttttk.",
+"..kkkkkkkk.."],
+dogface:[
+".kk.....kk.",
+"kDDk...kDDk",
+"kDDDkkkDDDk",
+".kDDDDDDDk.",
+".kDkDDDkDk.",
+".kDDDDDDDk.",
+"..kDDkDDk..",
+"...kkkkk..."],
+moon:[
+"...kkkk...",
+"..kyyk....",
+".kyyk.....",
+".kyyk..c..",
+".kyyk.....",
+".kyyk.c...",
+"..kyyk....",
+"...kkkk..."],
+coin:[
+"..kkkk..",
+".kccccK.",
+"kcyccccK",
+"kcyccccK",
+"kcyccccK",
+"kccccccK",
+".kccccK.",
+"..kkkk.."],
+star:[
+"....k....",
+"...kck...",
+"kkkkcckkk",
+"kcccccyck",
+".kcccyck.",
+"..kccck..",
+".kcckcck.",
+"kck...kck",
+"kk.....kk"],
+flame:[
+"....k...",
+"...kxk..",
+"..kxxk..",
+".kxxoxk.",
+".kxooxk.",
+"kxxoyoxk",
+"kxoyyoxk",
+".kxoox k",
+"..kkkk.."],
+crown:[
+"k..k..k.",
+"kckck ck",
+"kccccccK",
+"kcrcccrk",
+"kccccccK",
+"kkkkkkkk"]
+};
+PAL.K=PAL.k; PAL[" "]=null;
+function draw(cv,rows,scale){
+  const w=Math.max(...rows.map(r=>r.length)), h=rows.length;
+  cv.width=w; cv.height=h;
+  const ctx=cv.getContext("2d"); ctx.clearRect(0,0,w,h);
+  rows.forEach((r,y)=>{ for(let x=0;x<r.length;x++){ const col=PAL[r[x]]; if(col){ctx.fillStyle=col;ctx.fillRect(x,y,1,1)} } });
+  cv.style.width=typeof scale==="number"?(w*scale)+"px":"calc("+w+" * "+scale+")";
+  cv.style.height=typeof scale==="number"?(h*scale)+"px":"calc("+h+" * "+scale+")";
+  return cv;
+}
+function sprite(name,scale){return draw(document.createElement("canvas"),SPR[name],scale)}
+function mount(id,name,scale){const c=document.getElementById(id); c.classList.add("sprite"); draw(c,SPR[name],scale)}
+
+// stars
+(function(){const s=document.getElementById("stars"); let seed=7; const rnd=()=>(seed=(seed*9301+49297)%233280)/233280;
+  for(let i=0;i<46;i++){const e=document.createElement("i"); e.style.left=(rnd()*100)+"%"; e.style.top=(rnd()*55)+"%"; if(i%4===0)e.className="t"; e.style.animationDelay=(rnd()*1.6)+"s"; s.appendChild(e)}})();
+mount("spPrincess","princess","var(--px)");
+mount("spSword","sword","var(--px)");
+mount("spDog","dog","calc(var(--px) * .8)");
+mount("spDragon","dragon","calc(var(--px) * 1.15)");
+mount("icCoin","coin",4); mount("icStar","star",4); mount("icFlame","flame",4); mount("icCrown","crown",4);
+
+// ================= 8-BIT SOUND =================
+let soundOn=true; try{soundOn=localStorage.getItem("lq-sound")!=="off"}catch(e){}
+let actx=null;
+function beep(notes){
+  if(!soundOn) return;
+  try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    let t=actx.currentTime;
+    notes.forEach(([f,d])=>{const o=actx.createOscillator(),g=actx.createGain(); o.type="square"; o.frequency.value=f;
+      g.gain.setValueAtTime(.06,t); g.gain.exponentialRampToValueAtTime(.001,t+d); o.connect(g).connect(actx.destination); o.start(t); o.stop(t+d); t+=d*.9});
+  }catch(e){}
+}
+const SFX={tick:[[880,.06]],clear:[[660,.08],[880,.08],[1320,.14]],level:[[523,.12],[659,.12],[784,.12],[1047,.3]],hit:[[180,.08],[120,.12],[90,.18]],undo:[[330,.08]]};
+function setMuteLabel(){document.getElementById("mute").textContent="SOUND: "+(soundOn?"ON":"OFF")}
+document.getElementById("mute").onclick=()=>{soundOn=!soundOn; try{localStorage.setItem("lq-sound",soundOn?"on":"off")}catch(e){} setMuteLabel(); if(soundOn)beep(SFX.tick)};
+setMuteLabel();
+
+// ================= GAME DATA =================
+const GLASS_ML=250, GLASSES=8;
+const RANKS=["Novice","Squire","Adventurer","Ranger","Knight","Paladin","Champion","Hero","Legend","Dragonslayer"];
+const LEVEL_XP=500, PERFECT=50, STREAK_MIN=7;
+const QUESTS=[
+ {id:"water",name:"Potion of Hydration",desc:"2 L · 8 potions",xp:20,icon:"potion"},
+ {id:"teeth",name:"Polish the Fangs",desc:"Brush morning and night",xp:20,icon:"brush"},
+ {id:"workout",name:"Training Grounds",desc:"Do a workout",xp:30,icon:"dumbbell"},
+ {id:"edu",name:"Study the Tomes",desc:"60+ minutes of learning",xp:30,icon:"book"},
+ {id:"work",name:"Guild Work",desc:"Put in the day's work",xp:20,icon:"case"},
+ {id:"cv",name:"Send a Scroll",desc:"1+ CV · +5 EXP each extra",xp:25,icon:"scroll"},
+ {id:"hobby",name:"Free Quest",desc:"Hobby time, just for you",xp:15,icon:"palette"},
+ {id:"dog",name:"Adventure with Basa",desc:"Walk, play, cuddles",xp:15,icon:"dogface"},
+ {id:"sleep",name:"Rest at the Inn",desc:"8–9 h · 00:00 → 09:00",xp:25,icon:"moon"}
+];
+
+const pad=n=>String(n).padStart(2,"0");
+const keyOf=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const parseKey=k=>{const[a,b,c]=k.split("-").map(Number);return new Date(a,b-1,c)};
+const addDays=(k,n)=>{const d=parseKey(k);d.setDate(d.getDate()+n);return keyOf(d)};
+const todayKey=()=>keyOf(new Date());
+const fmtDay=k=>{const t=todayKey(); if(k===t)return"TODAY"; if(k===addDays(t,-1))return"YESTERDAY";
+  return parseKey(k).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).toUpperCase()};
+
+let days={}, profile={startWeight:null,goalKg:10,deadline:"2027-01-31",weights:[]};
+let viewKey=todayKey(), coll=null;
+const pending=new Set(), timers={}, chains={};
+
+function lsLoad(){try{const s=JSON.parse(localStorage.getItem("lifequest")||"null"); if(s){days=s.days||{}; profile=Object.assign(profile,s.profile||{})}}catch(e){}}
+function lsSave(){try{localStorage.setItem("lifequest",JSON.stringify({days,profile}))}catch(e){}}
+function blankDay(){return{water:0,teethAM:false,teethPM:false,workout:false,edu:0,work:false,cv:0,hobby:false,dog:false,bed:"",wake:""}}
+function getDay(k){return Object.assign(blankDay(),days[k]||{})}
+function sleepHours(d){ if(!d.bed||!d.wake) return null;
+  const[bh,bm]=d.bed.split(":").map(Number),[wh,wm]=d.wake.split(":").map(Number);
+  let m=(wh*60+wm)-(bh*60+bm); if(m<=0) m+=1440; return m/60 }
+
+function questState(q,d){
+  switch(q.id){
+    case"water": return {done:d.water>=GLASSES, xp:d.water>=GLASSES?q.xp:0};
+    case"teeth": return {done:d.teethAM&&d.teethPM, xp:(d.teethAM?10:0)+(d.teethPM?10:0)};
+    case"edu": return {done:d.edu>=60, xp:d.edu>=60?q.xp:0};
+    case"cv": return {done:d.cv>=1, xp:d.cv>=1?q.xp+Math.min(d.cv-1,5)*5:0};
+    case"sleep":{const h=sleepHours(d), ok=h!==null&&h>=8&&h<=9.5; return {done:ok,xp:ok?q.xp:0}}
+    default: return {done:!!d[q.id], xp:d[q.id]?q.xp:0};
+  }
+}
+function scoreDay(k){const d=getDay(k); let xp=0,done=0; QUESTS.forEach(q=>{const s=questState(q,d); xp+=s.xp; if(s.done)done++}); if(done===QUESTS.length)xp+=PERFECT; return{xp,done}}
+function totalXP(){let t=0; Object.keys(days).forEach(k=>t+=scoreDay(k).xp); return t+(profile.weights||[]).length*10}
+function streaks(){
+  let k=todayKey(); if(scoreDay(k).done<STREAK_MIN) k=addDays(k,-1);
+  let cur=0; while(scoreDay(k).done>=STREAK_MIN){cur++;k=addDays(k,-1)}
+  let best=0,run=0,prev=null; Object.keys(days).sort().forEach(x=>{ if(scoreDay(x).done>=STREAK_MIN){run=(prev&&addDays(prev,1)===x)?run+1:1; prev=x; best=Math.max(best,run)} else {run=0;prev=null} });
+  return {cur,best:Math.max(best,cur)};
+}
+function bossInfo(){
+  const ws=(profile.weights||[]).slice().sort((a,b)=>a.d<b.d?-1:1), start=profile.startWeight, goal=+profile.goalKg||10;
+  const now=ws.length?ws[ws.length-1].kg:start; const lost=start?Math.max(0,start-now):0; const rem=Math.max(0,goal-lost);
+  const left=Math.max(0,Math.ceil((parseKey(profile.deadline)-parseKey(todayKey()))/864e5));
+  return {ws,start,goal,now,lost,rem,left};
+}
+
+// ================= SAVE =================
+function setSync(t){document.getElementById("sync").textContent=t}
+function persist(id,data){
+  lsSave(); if(!coll) return;
+  pending.add(id); setSync("Saving…"); clearTimeout(timers[id]);
+  timers[id]=setTimeout(()=>{const body=JSON.parse(JSON.stringify(data));
+    chains[id]=(chains[id]||Promise.resolve()).then(()=>coll.doc(id).set(body))
+      .then(()=>{pending.delete(id); if(!pending.size) setSync("Game saved to your account · syncs across devices")})
+      .catch(e=>{pending.delete(id); setSync(e&&e.code==="quota_exceeded"?"Save slot full: couldn't save":"Couldn't save to your account. Kept on this device.")});
+  },500);
+}
+
+// ================= FX =================
+let tt; function toast(t){const el=document.getElementById("toast"); el.textContent=t; el.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),1500)}
+let typeTimer;
+function say(text,instant){
+  const p=document.getElementById("say"); clearInterval(typeTimer);
+  const reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(instant||reduce){p.innerHTML=""; p.append(text); p.insertAdjacentHTML("beforeend",'<span class="cursor">▼</span>'); return}
+  let i=0; p.textContent="";
+  typeTimer=setInterval(()=>{i+=2; p.textContent=text.slice(0,i); if(i>=text.length){clearInterval(typeTimer); p.insertAdjacentHTML("beforeend",'<span class="cursor">▼</span>')}},22);
+}
+function flash(){const f=document.getElementById("flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go")}
+function hitDragon(txt){const f=document.getElementById("foe"), d=document.getElementById("dmg");
+  f.classList.remove("hit"); d.classList.remove("go"); void f.offsetWidth; f.classList.add("hit"); d.textContent=txt; d.classList.add("go")}
+
+const LINES={
+  water:"Glug! The Potion of Hydration restores your HP.",teeth:"Fangs polished. Sparkling!",workout:"You trained hard. STR up!",
+  edu:"The tomes reveal their secrets. INT up!",work:"Guild work complete. The coffers grow.",cv:"A scroll flies toward a distant kingdom!",
+  hobby:"Free quest complete. Spirit restored.",dog:"Basa wags happily. Loyalty +1!",sleep:"You rested at the Inn. HP and MP fully restored."
+};
+function idleLine(){
+  const sd=scoreDay(todayKey()), b=bossInfo(), left=QUESTS.length-sd.done;
+  if(b.start&&b.rem<=0) return "The dragon is defeated! The kingdom celebrates Princess Maki!";
+  if(sd.done===QUESTS.length) return "Perfect day! All 9 quests cleared. The dragon trembles.";
+  if(!b.start) return "A dragon guards the road to January! Open Dragon settings to reveal its HP.";
+  return left+" quest"+(left===1?"":"s")+" left today. The dragon has "+b.rem.toFixed(1)+" kg of HP and "+b.left+" days until the deadline.";
+}
+
+// ================= ACTIONS =================
+function setDay(k,patch,qid){
+  const before=scoreDay(k), lvlB=Math.floor(totalXP()/LEVEL_XP), qB=qid?questState(QUESTS.find(q=>q.id===qid),getDay(k)).done:false;
+  days[k]=Object.assign(getDay(k),patch); persist("d-"+k,days[k]);
+  const after=scoreDay(k), lvlA=Math.floor(totalXP()/LEVEL_XP), qA=qid?questState(QUESTS.find(q=>q.id===qid),getDay(k)).done:false;
+  if(lvlA>lvlB){flash(); beep(SFX.level); toast("LEVEL UP! LV "+(lvlA+1)); say("Princess Maki reached LV "+(lvlA+1)+"! New title: "+RANKS[Math.min(lvlA,RANKS.length-1)]+".")}
+  else if(after.done===QUESTS.length&&before.done<QUESTS.length){flash(); beep(SFX.level); toast("PERFECT DAY! +"+PERFECT+" EXP"); say("PERFECT DAY! All 9 quests cleared. +"+PERFECT+" bonus EXP!")}
+  else if(qA&&!qB){beep(SFX.clear); toast("QUEST CLEAR! +"+(after.xp-before.xp)+" EXP"); say(LINES[qid])}
+  else if(after.xp>before.xp){beep(SFX.tick); toast("+"+(after.xp-before.xp)+" EXP")}
+  else if(after.xp<before.xp){beep(SFX.undo)}
+  else beep(SFX.tick);
+  render();
+}
+
+// ================= RENDER =================
+const $=id=>document.getElementById(id);
+function render(){
+  const tot=totalXP(), lvl=Math.floor(tot/LEVEL_XP)+1, into=tot%LEVEL_XP;
+  $("lvl").textContent="LV "+lvl;
+  $("expFill").style.width=(into/LEVEL_XP*100)+"%";
+  $("expTxt").textContent="EXP "+into+"/"+LEVEL_XP+" · "+RANKS[Math.min(lvl-1,RANKS.length-1)];
+  const st=streaks(); $("sStreak").textContent=st.cur; $("sBest").textContent=st.best;
+  $("sGold").textContent=tot.toLocaleString(); $("sToday").textContent=scoreDay(todayKey()).xp;
+  $("dayLabel").textContent=fmtDay(viewKey); $("next").disabled=viewKey>=todayKey();
+  const sd=scoreDay(viewKey); $("doneTxt").innerHTML="QUESTS <b>"+sd.done+"/"+QUESTS.length+"</b> · "+sd.xp+" EXP";
+  renderQuests(); renderBoss(); renderMap();
+}
+
+function cmd(label,on,fn,cls){const b=document.createElement("button"); b.className="cmd "+(cls||"")+(on?" on":""); b.textContent=label; b.onclick=fn; return b}
+function renderQuests(){
+  const d=getDay(viewKey), host=$("quests"); host.innerHTML="";
+  QUESTS.forEach(q=>{
+    const s=questState(q,d), el=document.createElement("article");
+    el.className="win q"+(s.done?" done":"");
+    el.innerHTML='<div class="qhead"><div class="ico"></div><div><h3></h3><p></p></div></div><span class="reward"></span><div class="ctrl"></div>';
+    el.querySelector(".ico").appendChild(sprite(q.icon,3));
+    el.querySelector("h3").textContent=q.name; el.querySelector("p").textContent=q.desc;
+    el.querySelector(".reward").textContent=s.done?"CLEAR +"+s.xp:q.xp+" EXP";
+    const c=el.querySelector(".ctrl");
+    if(q.id==="water"){
+      const g=document.createElement("div"); g.className="potions";
+      for(let i=0;i<GLASSES;i++){const b=document.createElement("button"); b.className="potion"+(i<d.water?" on":"");
+        b.setAttribute("aria-label","Potion "+(i+1)+" of 8"); b.appendChild(sprite("potion",2.5));
+        b.onclick=()=>setDay(viewKey,{water:d.water===i+1?i:i+1},"water"); g.appendChild(b)}
+      const sub=document.createElement("div"); sub.className="sub"; sub.textContent=(d.water*GLASS_ML/1000)+" L of 2 L · tap a potion per glass";
+      c.append(g,sub);
+    } else if(q.id==="teeth"){
+      c.append(cmd((d.teethAM?"✓ ":"")+"Morning",d.teethAM,()=>setDay(viewKey,{teethAM:!d.teethAM},"teeth"),"wide"),
+               cmd((d.teethPM?"✓ ":"")+"Night",d.teethPM,()=>setDay(viewKey,{teethPM:!d.teethPM},"teeth"),"wide"));
+    } else if(q.id==="edu"||q.id==="cv"){
+      const f=q.id, sv=f==="edu"?15:1;
+      const m=document.createElement("button"); m.className="step"; m.textContent="-"; m.setAttribute("aria-label","Less"); m.onclick=()=>setDay(viewKey,{[f]:Math.max(0,d[f]-sv)},f);
+      const n=document.createElement("span"); n.className="count"; n.textContent=f==="edu"?d.edu+"m":d.cv;
+      const p=document.createElement("button"); p.className="step"; p.textContent="+"; p.setAttribute("aria-label","More"); p.onclick=()=>setDay(viewKey,{[f]:d[f]+sv},f);
+      const sub=document.createElement("span"); sub.className="sub";
+      sub.textContent=f==="edu"?(d.edu>=60?"Target reached":(60-d.edu)+" min to go"):(d.cv===1?"scroll sent":"scrolls sent");
+      c.append(m,n,p,sub);
+    } else if(q.id==="sleep"){
+      const w=document.createElement("div"); w.className="timein";
+      w.innerHTML='<label for="bed">Bedtime<input type="time" id="bed"></label><label for="wake">Woke up<input type="time" id="wake"></label>';
+      const bi=w.querySelector("#bed"), wi=w.querySelector("#wake"); bi.value=d.bed; wi.value=d.wake;
+      bi.onchange=()=>setDay(viewKey,{bed:bi.value},"sleep"); wi.onchange=()=>setDay(viewKey,{wake:wi.value},"sleep");
+      const h=sleepHours(d), sub=document.createElement("div"); sub.className="sub";
+      sub.textContent=h===null?"Log last night's sleep":h.toFixed(1)+" h slept"+(h<8?" · too short":h>9.5?" · overslept":" · well rested");
+      c.append(w,sub,cmd("Rest 00:00 → 09:00",false,()=>setDay(viewKey,{bed:"00:00",wake:"09:00"},"sleep")));
+    } else {
+      c.append(cmd(d[q.id]?"✓ Cleared":"Complete",!!d[q.id],()=>setDay(viewKey,{[q.id]:!d[q.id]},q.id),"wide"));
+    }
+    host.appendChild(el);
+  });
+}
+
+function renderBoss(){
+  const b=bossInfo(), dl=parseKey(profile.deadline);
+  $("bossDeadline").textContent=b.left+" days until "+dl.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  $("foe").classList.toggle("dead",!!b.start&&b.rem<=0);
+  if(!b.start){ $("hpFill").style.width="100%"; $("hpKg").textContent="?? KG"; $("hpTxt").textContent="HP ??? · set start weight";
+    ["bStart","bNow","bLost","bPace"].forEach(i=>$(i).textContent="–"); $("chart").innerHTML='<text x="260" y="90" text-anchor="middle">Log a weigh-in to start the battle</text>'; return }
+  $("hpFill").style.width=(b.rem/b.goal*100)+"%";
+  $("hpKg").textContent=b.rem.toFixed(1)+" KG";
+  $("hpTxt").textContent=b.rem<=0?"DEFEATED!":"HP "+b.rem.toFixed(1)+"/"+b.goal+" kg";
+  $("bStart").textContent=b.start.toFixed(1); $("bNow").textContent=b.now.toFixed(1);
+  $("bLost").textContent="-"+b.lost.toFixed(1)+"kg";
+  $("bPace").textContent=b.rem<=0?"Won!":b.left>0?(b.rem/(b.left/7)).toFixed(2)+"/wk":"–";
+
+  const W=520,H=170,L=36,R=12,T=14,B=24, target=b.start-b.goal;
+  const sd=profile.startDate||(b.ws[0]&&b.ws[0].d)||todayKey(), t0=parseKey(sd), span=Math.max(1,(dl-t0)/864e5);
+  const all=b.ws.map(w=>w.kg), lo=Math.floor(Math.min(target,...all)-1), hi=Math.ceil(Math.max(b.start,...all)+1);
+  const x=k=>L+Math.min(1,Math.max(0,(parseKey(k)-t0)/864e5/span))*(W-L-R), y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
+  let s=""; const stepY=Math.max(1,Math.round((hi-lo)/4));
+  for(let v=lo;v<=hi;v+=stepY) s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#3a3f8a" stroke-width="1" stroke-dasharray="2 4"/><text x="'+(L-6)+'" y="'+(y(v)+4)+'" text-anchor="end">'+v+'</text>';
+  s+='<line x1="'+x(sd)+'" y1="'+y(b.start)+'" x2="'+(W-R)+'" y2="'+y(target)+'" stroke="#a9b0ea" stroke-width="2" stroke-dasharray="6 6"/>';
+  s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(target)+'" y2="'+y(target)+'" stroke="#5cf0a0" stroke-width="2"/>';
+  s+='<text x="'+(W-R)+'" y="'+(y(target)-6)+'" text-anchor="end" style="fill:#5cf0a0">GOAL '+target.toFixed(1)+'</text>';
+  const pts=[[sd,b.start]].concat(b.ws.filter(w=>w.d>=sd).map(w=>[w.d,w.kg]));
+  if(pts.length>1) s+='<polyline fill="none" stroke="#ffd447" stroke-width="3" points="'+pts.map(q=>x(q[0])+","+y(q[1])).join(" ")+'"/>';
+  pts.forEach((q,i)=>{const r=i===pts.length-1?5:3; s+='<rect x="'+(x(q[0])-r)+'" y="'+(y(q[1])-r)+'" width="'+(2*r)+'" height="'+(2*r)+'" fill="#ffd447" stroke="#1a1028" stroke-width="1.5"/>'});
+  const fd=k=>parseKey(k).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  s+='<text x="'+L+'" y="'+(H-6)+'">'+fd(sd)+'</text><text x="'+(W-R)+'" y="'+(H-6)+'" text-anchor="end">'+fd(profile.deadline)+'</text>';
+  $("chart").innerHTML=s;
+}
+
+function renderMap(){
+  const host=$("grid28"); host.innerHTML=""; const t=todayKey();
+  for(let i=27;i>=0;i--){const k=addDays(t,-i), sd=scoreDay(k), b=document.createElement("button");
+    const lv=sd.done===0?"":sd.done===QUESTS.length?"l3":sd.done>=STREAK_MIN?"l2":"l1";
+    b.className="cell "+lv+(k===viewKey?" sel":""); b.textContent=parseKey(k).getDate();
+    b.setAttribute("aria-label",fmtDay(k)+": "+sd.done+" quests"); b.onclick=()=>{viewKey=k; beep(SFX.tick); render()}; host.appendChild(b)}
+}
+
+// ================= CONTROLS =================
+$("prev").onclick=()=>{viewKey=addDays(viewKey,-1); beep(SFX.tick); render()};
+$("next").onclick=()=>{if(viewKey<todayKey()){viewKey=addDays(viewKey,1); beep(SFX.tick); render()}};
+$("wLog").onclick=()=>{
+  const v=parseFloat($("wIn").value); if(!(v>20&&v<300)){toast("ENTER WEIGHT IN KG"); return}
+  const before=bossInfo();
+  const ws=(profile.weights||[]).filter(w=>w.d!==viewKey), isNew=ws.length===(profile.weights||[]).length;
+  ws.push({d:viewKey,kg:Math.round(v*10)/10}); profile.weights=ws;
+  if(!profile.startWeight){profile.startWeight=Math.round(v*10)/10; profile.startDate=viewKey}
+  persist("profile",profile); $("wIn").value="";
+  const after=bossInfo(), dmg=before.start?before.rem-after.rem:0;
+  if(after.rem<=0&&before.rem>0){flash(); beep(SFX.level); hitDragon("FINISH!"); say("The dragon falls! Princess Maki has won the battle!")}
+  else if(dmg>0.04){beep(SFX.hit); hitDragon("-"+dmg.toFixed(1)+" KG"); say("Critical hit! The dragon takes "+dmg.toFixed(1)+" kg of damage. "+after.rem.toFixed(1)+" kg of HP left.")}
+  else if(!before.start){beep(SFX.clear); say("The battle begins! The dragon has "+after.goal+" kg of HP. Strike with every weigh-in.")}
+  else {beep(SFX.undo); say(dmg<-0.04?"The dragon regains "+(-dmg).toFixed(1)+" kg of HP. Hold the line and strike again!":"The dragon blocks. No change this time. Keep going!")}
+  toast(isNew?"+10 EXP":"WEIGH-IN UPDATED"); render();
+};
+$("sSave").onclick=()=>{
+  const sw=parseFloat($("sStart").value), g=parseFloat($("sGoal").value), dd=$("sDead").value;
+  if(sw>20){ if(!profile.startWeight) profile.startDate=todayKey(); profile.startWeight=sw }
+  if(g>0) profile.goalKg=g; if(dd) profile.deadline=dd;
+  persist("profile",profile); beep(SFX.clear); toast("DRAGON UPDATED"); render(); say(idleLine());
+};
+function fillSettings(){ $("sStart").value=profile.startWeight||""; $("sGoal").value=profile.goalKg||10; $("sDead").value=profile.deadline }
+
+let lastToday=todayKey();
+setInterval(()=>{const t=todayKey(); if(t!==lastToday){ if(viewKey===lastToday) viewKey=t; lastToday=t; render() }},60000);
+
+// ================= BOOT =================
+lsLoad(); fillSettings(); render(); say(idleLine(),true);
+(async()=>{
+  const use=window.claude&&window.claude.use;
+  if(!use){ setSync("Game saved on this device"); return }
+  const [db,user]=await Promise.all([use("db").catch(()=>null),use("user").catch(()=>null)]);
+  const uid=user?await user.id().catch(()=>null):null;
+  if(!db||!uid){ setSync("Game saved on this device"); return }
+  coll=db.collection("data/users/"+uid); setSync("Loading save file…");
+  const timer=setTimeout(()=>setSync("Can't reach your save file yet. Showing this device's copy."),10000);
+  let first=true;
+  coll.onSnapshot(snap=>{
+    if(!snap.metadata.fromCache) clearTimeout(timer);
+    if(first&&!snap.metadata.fromCache){ first=false;
+      if(snap.empty&&(Object.keys(days).length||profile.startWeight)){ Object.keys(days).forEach(k=>persist("d-"+k,days[k])); persist("profile",profile); return } }
+    snap.docs.forEach(doc=>{ if(pending.has(doc.id)||!doc.exists) return; const data=JSON.parse(JSON.stringify(doc.data()));
+      if(doc.id==="profile") profile=Object.assign({startWeight:null,goalKg:10,deadline:"2027-01-31",weights:[]},data);
+      else if(doc.id.startsWith("d-")) days[doc.id.slice(2)]=data });
+    lsSave(); fillSettings(); render(); say(idleLine(),true);
+    if(!snap.metadata.fromCache&&!pending.size) setSync("Game saved to your account · syncs across devices");
+  },()=>{clearTimeout(timer); coll=null; setSync("Account sync is off for this visit. Saving on this device.")});
+})();
+})();
+</script>
+
+</body>
+</html>
